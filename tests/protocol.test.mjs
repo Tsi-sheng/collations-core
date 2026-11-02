@@ -11,7 +11,7 @@ test('both compositions resolve every source and share the anchored proof', asyn
   for (const { id, path } of documents) sources.set(id, await read(path));
   assert.equal(sources.size, documents.length);
   for (const title of ['讲义', '证明选编']) {
-    const manifest = await read(title + '.yaml');
+    const manifest = (await read(title + '.yaml')).replace(/\r\n/g, '\n');
     const chapters = [...manifest.matchAll(/^  - document: (.+)(?:\n    block: (.+))?/gm)];
     assert.equal(chapters.length, title === '讲义' ? 2 : 1);
     for (const [, id, block] of chapters) {
