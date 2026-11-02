@@ -67,9 +67,9 @@ test('v1 migration, physical SQLite rebuild, identity and recovery',async t=>{
   assert.equal((await scanWorkspace(ws)).find(r=>r.id===id).title,'edited')
   keys=false
   await rename(file('moved.md'),file('unknown.md'))
-  const manifest=await ws.loadManifest()
-  await assert.rejects(scanWorkspace(ws),/Unconfirmed move/)
-  assert.equal(await ws.loadManifest(),manifest)
+  const records=await scanWorkspace(ws)
+  assert.ok(!records.some(r=>r.path==='unknown.md'))
+  assert.equal(JSON.parse(await ws.loadManifest()).conflicts[0].status,'pending')
   await writeFile(file('documents.json'),'{broken')
   await assert.rejects(scanWorkspace(ws),SyntaxError)
   assert.equal(await ws.loadManifest(),'{broken')
@@ -83,7 +83,7 @@ test('hard links, case collisions, path swaps and duplicate UUIDs stop publicati
     [[old[0],{...old[1],id:old[0].id}],[]]
   ]){
     let writes=0
-    await assert.rejects(scanWorkspace({loadManifest:async()=>JSON.stringify({version:2,documents:entries}),files:async()=>files,commit:async()=>{writes++}}),/Conflicting|Duplicate/)
+    await assert.rejects(scanWorkspace({loadManifest:async()=>JSON.stringify({version:2,documents:entries}),files:async()=>files.map(f=>({...f,bytes:new Uint8Array()})),commit:async()=>{writes++}}),/Conflicting|Duplicate/)
     assert.equal(writes,0)
   }
 })
