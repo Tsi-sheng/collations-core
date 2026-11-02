@@ -151,3 +151,17 @@ export async function scanWorkspace(workspace: Workspace, action?:Action, cache?
   await workspace.commit(raw,manifest,records)
   return records
 }
+
+export {parsePreview} from './preview.ts'
+
+/** Caller creates the file exclusively and publishes this manifest under the workspace lock. */
+export function registerCreatedDocument(raw:string,path:string) {
+  validatePath(path)
+  const docs=load(raw), state=stateOf(raw,validateEntry)
+  if(JSON.parse(raw).version!==3 || !path.toLowerCase().endsWith('.md') ||
+     docs.some(e=>e.path.toLowerCase()===path.toLowerCase()) ||
+     state.conflicts.some(c=>active(c)&&c.path.toLowerCase()===path.toLowerCase()))throw Error('Unavailable document path')
+  const id=crypto.randomUUID()
+  docs.push({id,path})
+  return {id,manifest:JSON.stringify({version:3,...state,generation:state.generation+1,documents:docs.sort(byPath)},null,2)+'\n'}
+}
