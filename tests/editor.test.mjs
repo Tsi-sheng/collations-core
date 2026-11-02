@@ -17,3 +17,8 @@ test('save as creates an independent registration while retaining conflicts and 
  assert.throws(()=>registerCreatedDocument(manifest,'数学/二.md'))
  assert.throws(()=>registerCreatedDocument(raw,'../escape.md'))
 })
+test('an invalid UTF-8 note retains its identity without blocking other notes',async()=>{
+ const {scanWorkspace}=await import('../src/index.ts')
+ const records=await scanWorkspace({loadManifest:async()=>null,files:async()=>[{path:'legacy.md',bytes:Uint8Array.of(255)},{path:'ok.md',bytes:new TextEncoder().encode('# Valid')}],commit:async()=>{}})
+ assert.equal(records.length,2);assert.equal(records[0].body,'');assert.equal(records[1].title,'Valid')
+})
