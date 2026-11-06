@@ -53,6 +53,11 @@ function validateEntry(e:Entry) {
       throw new ScanConflict('Invalid Manifest entry',[e.path])
     }
 }
+function indexTree(bytes:Uint8Array<ArrayBuffer>) {
+  let text:string
+  try{text=new TextDecoder('utf-8',{fatal:true}).decode(bytes)}catch{return undefined}
+  return fromMarkdown(text)
+}
 function plain(node: Nodes): string {
   if ('value' in node) return node.value
   if (node.type === 'image') return node.alt ?? ''
@@ -138,16 +143,30 @@ export async function scanWorkspace(workspace: Workspace, action?:Action, cache?
   for (const f of files) {
     if(pending.has(f.path))continue
     const cached=cache?.get(f.path)
-    const tree = cached ? undefined : fromMarkdown(new TextDecoder('utf-8',{fatal:true}).decode(f.bytes))
+    const tree = cached ? undefined : indexTree(f.bytes)
     const heading = tree?.children.find(n=>n.type === 'heading')
     const e = {id: matched.get(f.path)?.id ?? crypto.randomUUID(),path:f.path,fileKey:f.fileKey,
       sha256:facts.get(f.path)!.sha256}
     entries.push(e)
-    records.push({...e,title:cached?.title ?? (heading ? plain(heading) : f.path.split('/').at(-1)!),body:cached?.body ?? plain(tree!)})
+    records.push({...e,title:cached?.title ?? (heading ? plain(heading) : f.path.split('/').at(-1)!),body:cached?.body ?? (tree ? plain(tree) : '')})
   }
   const next={version:3,...state,documents:entries.sort(byPath)}
   if(JSON.stringify(next)!==JSON.stringify(raw ? JSON.parse(raw) : null))next.generation++
   const manifest=JSON.stringify(next,null,2)+'\n'
   await workspace.commit(raw,manifest,records)
   return records
+}
+
+export {parsePreview} from './preview.ts'
+
+/** Caller creates the file exclusively and publishes this manifest under the workspace lock. */
+export function registerCreatedDocument(raw:string,path:string) {
+  validatePath(path)
+  const docs=load(raw), state=stateOf(raw,validateEntry)
+  if(JSON.parse(raw).version!==3 || !path.toLowerCase().endsWith('.md') ||
+     docs.some(e=>e.path.toLowerCase()===path.toLowerCase()) ||
+     state.conflicts.some(c=>active(c)&&c.path.toLowerCase()===path.toLowerCase()))throw Error('Unavailable document path')
+  const id=crypto.randomUUID()
+  docs.push({id,path})
+  return {id,manifest:JSON.stringify({version:3,...state,generation:state.generation+1,documents:docs.sort(byPath)},null,2)+'\n'}
 }
