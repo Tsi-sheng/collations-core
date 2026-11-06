@@ -1,12 +1,16 @@
+import {extractKnowledge,resolveKnowledge,type Knowledge} from './knowledge.ts'
+export {extractKnowledge,resolveKnowledge} from './knowledge.ts'
+export type {Knowledge,Edge} from './knowledge.ts'
 import {active,proposal,stateOf,undo,uuid,type Action} from './reconcile.ts'
 export type {Action,Conflict,Decision,State} from './reconcile.ts'
 import { fromMarkdown } from 'mdast-util-from-markdown'
 import type { Nodes } from 'mdast'
 
 export interface Entry { id: string; path: string; fileKey?: string; sha256?: string }
-export interface DocumentRecord extends Entry { sha256: string; title: string; body: string }
+export interface DocumentRecord extends Entry { knowledge?:Knowledge; sha256: string; title: string; body: string }
 export interface FileInput { path: string; bytes: Uint8Array<ArrayBuffer>; fileKey?: string }
 export interface Workspace {
+  previous?:DocumentRecord[]
   loadManifest(): Promise<string | null>
   files(): Promise<FileInput[]>
   // Adapter verifies the snapshot and expected manifest under its workspace lock.
@@ -148,8 +152,9 @@ export async function scanWorkspace(workspace: Workspace, action?:Action, cache?
     const e = {id: matched.get(f.path)?.id ?? crypto.randomUUID(),path:f.path,fileKey:f.fileKey,
       sha256:facts.get(f.path)!.sha256}
     entries.push(e)
-    records.push({...e,title:cached?.title ?? (heading ? plain(heading) : f.path.split('/').at(-1)!),body:cached?.body ?? (tree ? plain(tree) : '')})
+    records.push({...e,knowledge:cached?.knowledge ? structuredClone(cached.knowledge) : tree ? extractKnowledge(tree) : undefined,title:cached?.title ?? (heading ? plain(heading) : f.path.split('/').at(-1)!),body:cached?.body ?? (tree ? plain(tree) : '')})
   }
+  resolveKnowledge(records,workspace.previous)
   const next={version:3,...state,documents:entries.sort(byPath)}
   if(JSON.stringify(next)!==JSON.stringify(raw ? JSON.parse(raw) : null))next.generation++
   const manifest=JSON.stringify(next,null,2)+'\n'
